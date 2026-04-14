@@ -19,6 +19,7 @@ from pathlib import Path
 CONFIG_FILE = Path.home() / "jotta_config.json"
 NOTAS_FILE  = Path.home() / "jotta_notas.json"
 SCRIPT_PATH = Path.home() / "jotta_telegram.py"
+GITHUB_RAW_URL = "https://raw.githubusercontent.com/focwscompany-web/Jottaia-/main/jotta_telegram.py"
 
 def carregar_config() -> dict:
     if CONFIG_FILE.exists():
@@ -472,9 +473,10 @@ async def handler(event):
         return
 
     # /atualizar
-    if texto.startswith("/atualizar "):
-        url = texto.split()[1]
-        await event.reply("🔄 Atualizando script...")
+    if texto.startswith("/atualizar"):
+        partes = texto.split()
+        url = partes[1] if len(partes) > 1 else GITHUB_RAW_URL
+        await event.reply("🔄 Baixando atualização do GitHub...")
         resultado = await atualizar_script(url)
         await event.reply(resultado)
         if "Reiniciando" in resultado:
@@ -546,7 +548,7 @@ async def handler(event):
     # /status
     if texto == "/status":
         await event.reply(
-            f"🟢 Jotta.ia v6.2\n"
+            f"🟢 Jotta.ia v6.3\n"
             f"🤖 Provedor: {PROVEDORES[provedor_atual][0]}\n"
             f"📝 Notas: {len(carregar_notas())} salvas\n"
             f"💾 Config: jotta_config.json\n"
@@ -607,7 +609,7 @@ async def handler(event):
     # /ajuda
     if texto in ("/ajuda", "/help", "/start"):
         await event.reply(
-            "Jotta.ia v6.2\n\n"
+            "Jotta.ia v6.3\n\n"
             "Fale naturalmente — executo no Termux automaticamente.\n\n"
             "/multi <pergunta> — consulta todas as IAs\n"
             "/hack <pergunta> — HackerAI pentest\n"
@@ -719,14 +721,37 @@ async def enviar_notificacao(texto: str):
     await client.send_message(USUARIO_AUTORIZADO, texto)
 
 
+async def auto_recuperar():
+    """Tenta reconectar automaticamente em caso de falha."""
+    tentativas = 0
+    while True:
+        try:
+            await client.start()
+            me = await client.get_me()
+            tentativas = 0
+            print(f"[Jotta.ia v6.3] Conectado como @{me.username}")
+            print(f"[Jotta.ia v6.3] Provedor: {PROVEDORES[provedor_atual][0]}")
+            print(f"[Jotta.ia v6.3] Config: {CONFIG_FILE}")
+            print("[Jotta.ia v6.3] Aguardando mensagens...")
+            await client.run_until_disconnected()
+        except Exception as e:
+            tentativas += 1
+            print(f"[Auto-Recuperação] Erro #{tentativas}: {e}")
+            # Tenta apagar sessão travada
+            session_file = Path.home() / "jotta_session.session"
+            session_journal = Path.home() / "jotta_session.session-journal"
+            if "database is locked" in str(e) or "OperationalError" in str(e):
+                print("[Auto-Recuperação] Sessão travada — apagando e reconectando...")
+                if session_file.exists():
+                    session_file.unlink()
+                if session_journal.exists():
+                    session_journal.unlink()
+            wait = min(30 * tentativas, 300)
+            print(f"[Auto-Recuperação] Tentando novamente em {wait}s...")
+            await asyncio.sleep(wait)
+
 async def main():
-    await client.start()
-    me = await client.get_me()
-    print(f"[Jotta.ia v6.2] Conectado como @{me.username}")
-    print(f"[Jotta.ia v6.2] Provedor: {PROVEDORES[provedor_atual][0]}")
-    print(f"[Jotta.ia v6.2] Config: {CONFIG_FILE}")
-    print("[Jotta.ia v6.2] Aguardando mensagens...")
-    await client.run_until_disconnected()
+    await auto_recuperar()
 
 if __name__ == "__main__":
     asyncio.run(main())
